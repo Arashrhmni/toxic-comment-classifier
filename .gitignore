@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Model artifacts (large binary files)
+checkpoints/
+*.pt
+*.bin
+*.safetensors
+
+# Dataset (download from Kaggle)
+data/
+*.csv
+
+# HuggingFace cache
+.cache/
+~/.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
