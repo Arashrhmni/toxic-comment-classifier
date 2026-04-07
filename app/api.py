@@ -6,9 +6,9 @@ Endpoints:
     POST /predict         — single text prediction
     POST /predict/batch   — up to 64 texts
 """
+import logging
 import os
 import time
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 

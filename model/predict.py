@@ -4,9 +4,6 @@ Inference utilities for ToxicClassifier.
 Handles single texts, batches, and threshold tuning.
 """
 import torch
-import numpy as np
-from pathlib import Path
-from typing import Union
 from transformers import DistilBertTokenizerFast
 
 from model.classifier import ToxicClassifier

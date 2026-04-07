@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import DistilBertModel, DistilBertConfig
+from transformers import DistilBertConfig, DistilBertModel
 
 
 class ToxicClassifier(nn.Module):

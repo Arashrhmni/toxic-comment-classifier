@@ -1,8 +1,9 @@
-import torch
-from torch.utils.data import Dataset, DataLoader
-from transformers import DistilBertTokenizerFast
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+import torch
+from torch.utils.data import DataLoader, Dataset
+from transformers import DistilBertTokenizerFast
 
 
 LABELS = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]

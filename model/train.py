@@ -14,12 +14,12 @@ import logging
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import roc_auc_score
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LinearLR
-from sklearn.metrics import roc_auc_score
-import numpy as np
 
 from model.classifier import ToxicClassifier
 from model.dataset import load_dataframes, make_loaders
