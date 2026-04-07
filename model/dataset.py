@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from transformers import DistilBertTokenizerFast
 
-
 LABELS = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
 TOKENIZER_NAME = "distilbert-base-uncased"
 MAX_LENGTH = 128
@@ -16,8 +15,8 @@ class ToxicDataset(Dataset):
     PyTorch Dataset for the Jigsaw Toxic Comment dataset.
 
     Expects a DataFrame with columns:
-        comment_text  — raw comment string
-        toxic, severe_toxic, obscene, threat, insult, identity_hate  — binary labels
+        comment_text  - raw comment string
+        toxic, severe_toxic, obscene, threat, insult, identity_hate - binary labels
 
     Tokenization is done once at construction time (fast tokenizer, pre-truncated).
     """
@@ -79,7 +78,6 @@ def load_dataframes(data_dir: str, sample_frac: float = 1.0):
     if sample_frac < 1.0:
         df = df.sample(frac=sample_frac, random_state=42).reset_index(drop=True)
 
-    # 80/10/10 split
     n = len(df)
     train_end = int(0.8 * n)
     val_end = int(0.9 * n)
@@ -97,7 +95,7 @@ def make_loaders(
     test_df: pd.DataFrame,
     batch_size: int = 32,
     num_workers: int = 2,
-) -> tuple[DataLoader, DataLoader, DataLoader]:  # noqa: UP006
+) -> tuple[DataLoader, DataLoader, DataLoader]:
     tokenizer = DistilBertTokenizerFast.from_pretrained(TOKENIZER_NAME)
 
     train_ds = ToxicDataset(train_df, tokenizer)

@@ -4,19 +4,20 @@ Unit and integration tests for ToxicClassifier.
 Runs entirely without a trained checkpoint or Kaggle data.
 Uses synthetic data and untrained model weights.
 """
+
 import importlib
 import os
 
 import pandas as pd
 import pytest
 import torch
+from fastapi.testclient import TestClient
 from transformers import DistilBertTokenizerFast
 
+import app.api as api_module
 from model.classifier import ToxicClassifier
 from model.dataset import ToxicDataset
 from model.predict import ToxicPredictor
-
-# ── Constants ─────────────────────────────────────────────────────────────────
 
 LABELS = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
 TOKENIZER = "distilbert-base-uncased"
@@ -40,9 +41,6 @@ def make_sample_df(n: int = 20) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-# ── Model tests ───────────────────────────────────────────────────────────────
-
-
 class TestToxicClassifier:
     def test_output_shape(self):
         model = ToxicClassifier()
@@ -53,15 +51,15 @@ class TestToxicClassifier:
             out = model(input_ids, attention_mask)
         assert out.shape == (4, 6), f"Expected (4, 6), got {out.shape}"
 
-    def test_output_range(self):
-        """Sigmoid output must be in [0, 1]."""
+    def test_output_is_logits(self):
         model = ToxicClassifier()
         model.eval()
         input_ids = torch.randint(0, 1000, (2, 32))
         attention_mask = torch.ones(2, 32, dtype=torch.long)
         with torch.no_grad():
             out = model(input_ids, attention_mask)
-        assert (out >= 0).all() and (out <= 1).all()
+        assert torch.isfinite(out).all()
+        assert (out.min() < 0) or (out.max() > 1)
 
     def test_num_labels(self):
         assert ToxicClassifier().num_labels == 6
@@ -75,13 +73,6 @@ class TestToxicClassifier:
         assert model.classifier.weight.requires_grad
 
     def test_deterministic_in_eval_mode(self):
-        """
-        In eval mode (dropout disabled) the model must return identical
-        outputs for the same input across two forward passes.
-        Replaces the incorrect batch-independence test: DistilBERT's
-        layer norm and attention are batch-aware, so a sample processed
-        alone vs inside a batch will legitimately differ numerically.
-        """
         model = ToxicClassifier()
         model.eval()
         x = torch.randint(0, 1000, (2, 32))
@@ -90,9 +81,6 @@ class TestToxicClassifier:
             out1 = model(x, mask)
             out2 = model(x, mask)
         assert torch.allclose(out1, out2), "Same input in eval mode must yield identical output"
-
-
-# ── Dataset tests ─────────────────────────────────────────────────────────────
 
 
 class TestToxicDataset:
@@ -116,9 +104,6 @@ class TestToxicDataset:
         ds = ToxicDataset(make_sample_df(5), tokenizer, max_length=64)
         assert ds[0]["input_ids"].shape == (64,)
         assert ds[0]["attention_mask"].shape == (64,)
-
-
-# ── Predict tests (untrained model) ──────────────────────────────────────────
 
 
 class TestToxicPredictor:
@@ -154,7 +139,6 @@ class TestToxicPredictor:
             assert "scores" in r and "flags" in r
 
     def test_batch_matches_single(self, predictor):
-        """A batch of one should equal a single prediction exactly."""
         text = "This is a consistency test."
         single = predictor.predict(text)["scores"]
         batch = predictor.predict_batch([text])[0]["scores"]
@@ -162,14 +146,9 @@ class TestToxicPredictor:
             assert abs(single[label] - batch[label]) < 1e-4
 
 
-# ── API tests ─────────────────────────────────────────────────────────────────
-
-
 class TestAPI:
     @pytest.fixture(scope="class")
     def client(self, tmp_path_factory):
-        import app.api as api_module
-        from fastapi.testclient import TestClient
 
         ckpt = tmp_path_factory.mktemp("api_ckpt") / "best_model.pt"
         torch.save(ToxicClassifier().state_dict(), ckpt)

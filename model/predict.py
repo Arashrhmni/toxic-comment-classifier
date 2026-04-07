@@ -3,6 +3,7 @@ Inference utilities for ToxicClassifier.
 
 Handles single texts, batches, and threshold tuning.
 """
+
 import torch
 from transformers import DistilBertTokenizerFast
 
@@ -62,11 +63,14 @@ class ToxicPredictor:
         input_ids = enc["input_ids"].to(self.device)
         attention_mask = enc["attention_mask"].to(self.device)
 
-        probs = self.model(input_ids, attention_mask).cpu().numpy()
+        logits = self.model(input_ids, attention_mask)
+        probs = torch.sigmoid(logits).cpu().numpy()
 
         results = []
         for prob_row in probs:
-            scores = {label: round(float(p), 4) for label, p in zip(ToxicClassifier.LABELS, prob_row)}
+            scores = {
+                label: round(float(p), 4) for label, p in zip(ToxicClassifier.LABELS, prob_row)
+            }
             flags = {label: bool(p >= self.threshold) for label, p in scores.items()}
             results.append(
                 {
@@ -78,13 +82,9 @@ class ToxicPredictor:
         return results
 
     def predict(self, text: str) -> dict:
-        """Predict toxicity for a single text."""
         return self.predict_batch([text])[0]
 
     def predict_with_explanation(self, text: str) -> dict:
-        """
-        Predict and return a human-readable summary alongside raw scores.
-        """
         result = self.predict(text)
         active = [label for label, flagged in result["flags"].items() if flagged]
         top_score = max(result["scores"].values())
