@@ -154,7 +154,7 @@ def train(args):
 
     # Final evaluation on test set
     logger.info("Loading best checkpoint for test evaluation...")
-    model.load_state_dict(torch.load(output_dir / "best_model.pt", map_location=device))
+    model.load_state_dict(torch.load(output_dir / "best_model.pt", map_location=device, weights_only=True))
     test_loss, test_auc = evaluate(model, test_loader, criterion, device)
     logger.info(f"Test AUC: {test_auc:.4f}")
 

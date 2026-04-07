@@ -6,15 +6,10 @@ Uses synthetic data and untrained model weights.
 """
 import pytest
 import torch
-import numpy as np
 import pandas as pd
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from model.classifier import ToxicClassifier
-from model.dataset import ToxicDataset, make_loaders
+from model.dataset import ToxicDataset
 from model.predict import ToxicPredictor
 from transformers import DistilBertTokenizerFast
 

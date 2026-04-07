@@ -37,7 +37,7 @@ class ToxicPredictor:
         self.tokenizer = DistilBertTokenizerFast.from_pretrained(TOKENIZER_NAME)
         self.model = ToxicClassifier()
         self.model.load_state_dict(
-            torch.load(checkpoint_path, map_location=self.device)
+            torch.load(checkpoint_path, map_location=self.device, weights_only=True)
         )
         self.model.to(self.device)
         self.model.eval()

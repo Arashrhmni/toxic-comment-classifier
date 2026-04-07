@@ -2,9 +2,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import DistilBertTokenizerFast
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from typing import Optional
 
 
 LABELS = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
@@ -98,7 +96,7 @@ def make_loaders(
     test_df: pd.DataFrame,
     batch_size: int = 32,
     num_workers: int = 2,
-) -> tuple[DataLoader, DataLoader, DataLoader]:
+) -> tuple[DataLoader, DataLoader, DataLoader]:  # noqa: UP006
     tokenizer = DistilBertTokenizerFast.from_pretrained(TOKENIZER_NAME)
 
     train_ds = ToxicDataset(train_df, tokenizer)
