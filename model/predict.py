@@ -31,6 +31,8 @@ class ToxicPredictor:
         else:
             self.device = torch.device(device)
 
+        if not 0 <= threshold <= 1:
+            raise ValueError("threshold must be between 0 and 1.")
         self.threshold = threshold
         self.tokenizer = DistilBertTokenizerFast.from_pretrained(TOKENIZER_NAME)
         self.model = ToxicClassifier()
@@ -59,6 +61,9 @@ class ToxicPredictor:
             - flags: {label: bool} (True if score >= threshold)
             - is_toxic: bool (any flag is True)
         """
+        if not texts:
+            raise ValueError("texts must contain at least one item.")
+
         enc = self._tokenize(texts)
         input_ids = enc["input_ids"].to(self.device)
         attention_mask = enc["attention_mask"].to(self.device)

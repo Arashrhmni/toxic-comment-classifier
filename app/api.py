@@ -19,7 +19,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH", "./checkpoints/best_model.pt")
-THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.5"))
+
+try:
+    THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.5"))
+except ValueError:
+    logger.warning("Invalid PREDICTION_THRESHOLD. Falling back to 0.5.")
+    THRESHOLD = 0.5
+
 _start = time.time()
 
 
@@ -60,7 +66,10 @@ class PredictRequest(BaseModel):
     @field_validator("text")
     @classmethod
     def strip_whitespace(cls, v: str) -> str:
-        return v.strip()
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Text must not be empty.")
+        return cleaned
 
 
 class BatchPredictRequest(BaseModel):
@@ -101,6 +110,11 @@ class PredictResponse(BaseModel):
     top_score: float
 
 
+class BatchPredictResponse(BaseModel):
+    results: list[PredictResponse]
+    count: int
+
+
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
@@ -139,9 +153,9 @@ async def predict(body: PredictRequest, request: Request):
     return predictor.predict_with_explanation(body.text)
 
 
-@app.post("/predict/batch")
+@app.post("/predict/batch", response_model=BatchPredictResponse)
 async def predict_batch(body: BatchPredictRequest, request: Request):
     """Classify up to 64 comments in a single request."""
     predictor = _predictor(request)
-    results = predictor.predict_batch(body.texts)
+    results = [predictor.predict_with_explanation(text) for text in body.texts]
     return {"results": results, "count": len(results)}

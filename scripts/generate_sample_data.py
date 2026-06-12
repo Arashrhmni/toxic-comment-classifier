@@ -6,6 +6,7 @@ Usage:
     python scripts/generate_sample_data.py
     python -m model.train --data-dir ./data --epochs 1 --sample-frac 0.05
 """
+import argparse
 import random
 from pathlib import Path
 
@@ -80,5 +81,13 @@ def main(n: int = 2000, output_dir: str = "./data"):
     print(f"Label distribution:\n{df[['toxic','severe_toxic','obscene','threat','insult','identity_hate']].mean().round(3)}")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate sample training data.")
+    parser.add_argument("--rows", type=int, default=2000, help="Number of rows to generate")
+    parser.add_argument("--output-dir", default="./data", help="Output folder")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(n=args.rows, output_dir=args.output_dir)

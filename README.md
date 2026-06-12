@@ -1,121 +1,186 @@
 # Toxic Comment Classifier
 
-Multi-label toxicity detection fine-tuned on **DistilBERT** using PyTorch. Classifies comments across 6 toxicity categories simultaneously, served via a FastAPI inference API with streaming-ready batch endpoints.
+A beginner-friendly NLP project that classifies comments into six toxicity categories using **DistilBERT**, PyTorch, and FastAPI.
 
-Trained on the [Jigsaw Toxic Comment Classification](https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge) dataset. Achieves **~0.98 column-wise ROC-AUC** on the full dataset.
-
----
-
-## Why this project
-
-Real-world NLP tasks are rarely single-label. This project demonstrates:
-- **Fine-tuning a transformer** (DistilBERT) for multi-label classification
-- Handling **class imbalance** with BCEWithLogitsLoss + `pos_weight`
-- **Differential learning rates** — lower LR for BERT layers, higher for the classification head
-- **Early stopping** + best-checkpoint saving during training
-- Decoupling **retrieval quality** (embeddings) from **generation quality** (LLM) — same principle used in RAG pipelines
-- Wrapping a trained model in a **production FastAPI service** with proper schema validation
+The project is intentionally kept simple: one model, one training script, one prediction wrapper, and one API.
 
 ---
 
-## Architecture
+## What the project does
 
-```
-Input text
-    │
-    ▼
-DistilBertTokenizer (max_length=128, [CLS] prepended)
-    │
-    ▼
-DistilBERT base (66M params, fine-tuned)
-    │
-    ▼
-[CLS] token hidden state  (768-dim)
-    │
-    ▼
-Dropout(0.3)
-    │
-    ▼
-Linear(768 → 6)
-    │
-    ▼
-Sigmoid  →  [toxic, severe_toxic, obscene, threat, insult, identity_hate]
-             each independently in [0, 1]
+The model reads a comment and returns a score for each label:
+
+- `toxic`
+- `severe_toxic`
+- `obscene`
+- `threat`
+- `insult`
+- `identity_hate`
+
+Because this is a **multi-label** problem, one comment can belong to more than one category at the same time.
+
+Example:
+
+```json
+{
+  "toxic": 0.91,
+  "insult": 0.84,
+  "threat": 0.03
+}
 ```
 
-**Loss:** `BCEWithLogitsLoss` with `pos_weight=10.0` per label to compensate for ~10:1 class imbalance.
+This means the model can say: “this comment is toxic and insulting, but probably not a threat.”
 
-**Optimizer:** `AdamW` with layer-wise LR — `2e-5` for BERT body, `2e-4` for classifier head.
+---
 
-**Scheduler:** Linear warmup decay over full training.
+## Why this project is useful
+
+This project demonstrates the most important parts of a small machine-learning application:
+
+- Loading and preparing text data
+- Tokenizing text with a transformer tokenizer
+- Fine-tuning DistilBERT for classification
+- Saving and loading a trained model
+- Running predictions from Python
+- Serving predictions through a FastAPI API
+- Testing the model, dataset, predictor, and API
+- Running the app with Docker
+
+---
+
+## Simple architecture
+
+```text
+Input comment
+    ↓
+DistilBERT tokenizer
+    ↓
+DistilBERT model
+    ↓
+Dropout layer
+    ↓
+Linear classifier
+    ↓
+Six toxicity scores
+```
+
+The model returns raw logits during training. During prediction, the logits are converted into probabilities using sigmoid.
+
+---
+
+## Project structure
+
+```text
+toxic-comment-classifier/
+├── app/
+│   └── api.py                  # FastAPI app
+├── model/
+│   ├── classifier.py           # DistilBERT model
+│   ├── dataset.py              # Dataset and DataLoader code
+│   ├── predict.py              # Prediction helper
+│   └── train.py                # Training script
+├── scripts/
+│   └── generate_sample_data.py # Creates small synthetic data
+├── tests/
+│   └── test_classifier.py      # Unit and API tests
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── requirements-dev.txt
+└── README.md
+```
 
 ---
 
 ## Quickstart
 
-### 1. Install
+### 1. Create a virtual environment
 
 ```bash
-git clone https://github.com/yourusername/toxic-comment-classifier
-cd toxic-comment-classifier
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
+```
+
+On Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### 2. Install dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Get data
+For tests and linting:
 
-**Option A — Kaggle dataset (recommended for real metrics):**
 ```bash
-# Install Kaggle CLI and place kaggle.json in ~/.kaggle/
-kaggle competitions download -c jigsaw-toxic-comment-classification-challenge
-unzip jigsaw-toxic-comment-classification-challenge.zip -d data/
+pip install -r requirements-dev.txt
 ```
 
-**Option B — Synthetic data (no account needed, runs in ~2 min on CPU):**
+---
+
+## Option A: Run with sample data
+
+This is the easiest way to test the project without a Kaggle account.
+
 ```bash
 python scripts/generate_sample_data.py
+python -m model.train --data-dir ./data --epochs 1 --batch-size 8 --freeze-base
 ```
 
-### 3. Train
+This creates:
+
+```text
+checkpoints/best_model.pt
+checkpoints/training_results.json
+```
+
+The sample data is only for testing the code. It is not meant to produce a real production-quality model.
+
+---
+
+## Option B: Train with the real Kaggle dataset
+
+Download the Jigsaw Toxic Comment Classification dataset from Kaggle and place `train.csv` inside the `data/` folder.
+
+Then run:
 
 ```bash
-# Full training (GPU recommended)
 python -m model.train --data-dir ./data --epochs 3 --batch-size 32
-
-# Quick smoke test on CPU (synthetic data, 10% sample)
-python -m model.train --data-dir ./data --epochs 1 --sample-frac 0.1
-
-# All options
-python -m model.train --help
 ```
 
-Training saves `checkpoints/best_model.pt` and `checkpoints/training_results.json`.
+A GPU is recommended for real training.
 
-### 4. Run inference API
+---
+
+## Run the API
+
+After training, start the API:
 
 ```bash
 uvicorn app.api:app --reload
 ```
 
-Or with Docker:
+Open the API docs in your browser:
 
-```bash
-docker compose up --build
+```text
+http://localhost:8000/docs
 ```
-
-API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## API Reference
-
-### Single prediction
+## Example prediction
 
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"text": "You are completely wrong and an absolute idiot."}'
+  -d '{"text": "You are completely wrong and an idiot."}'
 ```
+
+Example response:
 
 ```json
 {
@@ -141,7 +206,9 @@ curl -X POST http://localhost:8000/predict \
 }
 ```
 
-### Batch prediction (up to 64 texts)
+---
+
+## Batch prediction
 
 ```bash
 curl -X POST http://localhost:8000/predict/batch \
@@ -149,11 +216,15 @@ curl -X POST http://localhost:8000/predict/batch \
   -d '{"texts": ["Hello world!", "I hate you.", "Great article."]}'
 ```
 
-### Health check
+---
+
+## Health check
 
 ```bash
 curl http://localhost:8000/health
 ```
+
+Example:
 
 ```json
 {
@@ -164,97 +235,68 @@ curl http://localhost:8000/health
 }
 ```
 
-### Adjusting the threshold
+---
 
-Set `PREDICTION_THRESHOLD` to trade off precision vs recall:
+## Change the prediction threshold
+
+The default threshold is `0.5`.
 
 ```bash
 PREDICTION_THRESHOLD=0.3 uvicorn app.api:app --reload
-# Lower threshold → catches more toxicity, more false positives
+```
+
+Lower threshold: catches more toxic comments, but may create more false positives.
+
+Higher threshold: fewer false positives, but may miss some toxic comments.
+
+---
+
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+The API will be available at:
+
+```text
+http://localhost:8000/docs
+```
+
+Make sure `checkpoints/best_model.pt` exists before using the prediction endpoints.
+
+---
+
+## Run tests
+
+```bash
+pytest tests/ -v
+```
+
+Run the linter:
+
+```bash
+ruff check model/ app/ tests/ scripts/
 ```
 
 ---
 
 ## Training arguments
 
-| Argument | Default | Description |
-|---|---|---|
-| `--data-dir` | `./data` | Directory containing `train.csv` |
-| `--output-dir` | `./checkpoints` | Where to save model + results |
-| `--epochs` | `3` | Max training epochs |
-| `--batch-size` | `32` | Batch size |
-| `--lr` | `2e-5` | Learning rate for BERT layers |
-| `--dropout` | `0.3` | Dropout on classifier head |
+| Argument | Default | Meaning |
+|---|---:|---|
+| `--data-dir` | `./data` | Folder containing `train.csv` |
+| `--output-dir` | `./checkpoints` | Folder for saved model files |
+| `--epochs` | `3` | Number of training epochs |
+| `--batch-size` | `32` | Number of comments per batch |
+| `--lr` | `2e-5` | Learning rate |
+| `--dropout` | `0.3` | Dropout before the final classifier |
 | `--patience` | `2` | Early stopping patience |
-| `--sample-frac` | `1.0` | Fraction of data to use (e.g. `0.1` for quick runs) |
+| `--sample-frac` | `1.0` | Use only part of the data |
+| `--freeze-base` | `False` | Train only the final classifier head |
 
 ---
 
-## Running tests
+## Notes
 
-```bash
-pip install -r requirements-dev.txt
-pytest tests/ -v
-```
-
-Tests cover model architecture (output shape, sigmoid range, batch independence), dataset construction, inference pipeline consistency, and all API endpoints — without requiring a trained checkpoint or Kaggle data.
-
----
-
-## Project structure
-
-```
-toxic-comment-classifier/
-├── model/
-│   ├── classifier.py     # ToxicClassifier (DistilBERT + head)
-│   ├── dataset.py        # ToxicDataset + DataLoader factory
-│   ├── train.py          # Training loop, early stopping, checkpointing
-│   └── predict.py        # ToxicPredictor inference wrapper
-├── app/
-│   └── api.py            # FastAPI endpoints (/predict, /predict/batch, /health)
-├── scripts/
-│   └── generate_sample_data.py   # Synthetic data for CI/testing
-├── notebooks/
-│   └── training_walkthrough.ipynb  # EDA, training, evaluation, live inference
-├── tests/
-│   └── test_classifier.py  # Model, dataset, predictor, API tests
-├── .github/workflows/ci.yml
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── requirements-dev.txt
-```
-
----
-
-## Tech stack
-
-| Component | Technology |
-|---|---|
-| Model | DistilBERT (`distilbert-base-uncased`) |
-| Deep learning | PyTorch 2.x |
-| Transformers | HuggingFace `transformers` |
-| Metrics | scikit-learn (`roc_auc_score`) |
-| API | FastAPI |
-| Containerization | Docker |
-| CI | GitHub Actions |
-| Testing | pytest |
-
----
-
-## Results (Kaggle dataset, 3 epochs, full data)
-
-| Metric | Value |
-|---|---|
-| Val ROC-AUC (macro) | ~0.979 |
-| Test ROC-AUC (macro) | ~0.977 |
-| Training time (V100) | ~25 min |
-| Training time (CPU) | ~6 hr |
-
-> Results will vary with synthetic data — use the Kaggle dataset for real metrics.
-
----
-
-## License
-
-MIT
+This is a learning project, not a finished moderation system. A real moderation system would need stronger evaluation, bias checks, human review, monitoring, and clear rules for how predictions are used.

@@ -54,29 +54,33 @@ class ToxicDataset(Dataset):
 
 def load_dataframes(data_dir: str, sample_frac: float = 1.0):
     """
-    Load Jigsaw train/test CSVs from data_dir.
+    Load train.csv and split it into train, validation, and test DataFrames.
 
-    Args:
-        data_dir: path containing train.csv (and optionally test.csv, test_labels.csv)
-        sample_frac: fraction of training data to use (useful for quick iteration)
-
-    Returns:
-        train_df, val_df, test_df
+    The split is intentionally simple: 80% train, 10% validation, 10% test.
+    The rows are shuffled first so that the split is not affected by the original CSV order.
     """
+    if not 0 < sample_frac <= 1:
+        raise ValueError("sample_frac must be greater than 0 and less than or equal to 1.")
+
     data_path = Path(data_dir)
     train_path = data_path / "train.csv"
 
     if not train_path.exists():
         raise FileNotFoundError(
             f"train.csv not found in {data_dir}.\n"
-            "Download from: https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge/data\n"
-            "Or run: python scripts/generate_sample_data.py  (creates synthetic data for testing)"
+            "Download the Kaggle data and place train.csv in the data folder, or run:\n"
+            "python scripts/generate_sample_data.py"
         )
 
     df = pd.read_csv(train_path)
+    required_columns = ["comment_text", *LABELS]
+    missing_columns = [column for column in required_columns if column not in df.columns]
+    if missing_columns:
+        raise ValueError(f"train.csv is missing required columns: {missing_columns}")
 
-    if sample_frac < 1.0:
-        df = df.sample(frac=sample_frac, random_state=42).reset_index(drop=True)
+    # Shuffle before splitting. This avoids a biased train/validation/test split
+    # if the CSV is sorted by label or by time.
+    df = df.sample(frac=sample_frac, random_state=42).reset_index(drop=True)
 
     n = len(df)
     train_end = int(0.8 * n)
@@ -94,7 +98,7 @@ def make_loaders(
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
     batch_size: int = 32,
-    num_workers: int = 2,
+    num_workers: int = 0,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     tokenizer = DistilBertTokenizerFast.from_pretrained(TOKENIZER_NAME)
 

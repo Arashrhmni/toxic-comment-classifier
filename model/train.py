@@ -95,18 +95,23 @@ def train(args):
         train_df, val_df, test_df, batch_size=args.batch_size
     )
 
-    model = ToxicClassifier(dropout=args.dropout).to(device)
+    model = ToxicClassifier(dropout=args.dropout, freeze_base=args.freeze_base).to(device)
     logger.info(f"Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
 
-    pos_weight = torch.tensor([10.0] * model.num_labels).to(device)
+    # Give rare labels a higher weight during training.
+    # This is calculated from the training data instead of being hard-coded.
+    positive_counts = torch.tensor(train_df[ToxicClassifier.LABELS].sum().values, dtype=torch.float32)
+    negative_counts = len(train_df) - positive_counts
+    pos_weight = (negative_counts / positive_counts.clamp(min=1)).clamp(max=20).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
-    bert_params = list(model.bert.parameters())
-    head_params = list(model.classifier.parameters()) + list(model.dropout.parameters())
-    optimizer = AdamW(
-        [{"params": bert_params, "lr": args.lr}, {"params": head_params, "lr": args.lr * 10}],
-        weight_decay=0.01,
-    )
+    bert_params = [param for param in model.bert.parameters() if param.requires_grad]
+    head_params = list(model.classifier.parameters())
+    optimizer_groups = [{"params": head_params, "lr": args.lr * 10}]
+    if bert_params:
+        optimizer_groups.insert(0, {"params": bert_params, "lr": args.lr})
+
+    optimizer = AdamW(optimizer_groups, weight_decay=0.01)
 
     total_steps = len(train_loader) * args.epochs
     scheduler = LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=total_steps)
@@ -134,11 +139,18 @@ def train(args):
             {"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "val_auc": val_auc}
         )
 
-        if val_auc > best_auc:
-            best_auc = val_auc
+        if np.isnan(val_auc):
+            logger.info("Validation AUC is not available for this split; using validation loss instead.")
+            improved = not history[:-1] or val_loss < min(item["val_loss"] for item in history[:-1])
+        else:
+            improved = val_auc > best_auc
+
+        if improved:
+            if not np.isnan(val_auc):
+                best_auc = val_auc
             patience_counter = 0
             torch.save(model.state_dict(), output_dir / "best_model.pt")
-            logger.info(f"  ✓ New best AUC: {best_auc:.4f} — saved checkpoint")
+            logger.info(f"  ✓ Saved new best checkpoint. Best AUC: {best_auc:.4f}")
         else:
             patience_counter += 1
             if patience_counter >= args.patience:
@@ -149,7 +161,9 @@ def train(args):
                 break
 
     logger.info("Loading best checkpoint for test evaluation...")
-    model.load_state_dict(torch.load(output_dir / "best_model.pt", map_location=device, weights_only=True))
+    model.load_state_dict(
+        torch.load(output_dir / "best_model.pt", map_location=device, weights_only=True)
+    )
     test_loss, test_auc = evaluate(model, test_loader, criterion, device)
     logger.info(f"Test AUC: {test_auc:.4f}")
 
@@ -178,6 +192,11 @@ def parse_args():
     p.add_argument("--patience", type=int, default=2, help="Early stopping patience")
     p.add_argument(
         "--sample-frac", type=float, default=1.0, help="Fraction of data to use (for quick tests)"
+    )
+    p.add_argument(
+        "--freeze-base",
+        action="store_true",
+        help="Train only the final classifier layer. Useful for quick CPU demos.",
     )
     return p.parse_args()
 
